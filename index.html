@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Tutanak — Sesli Not</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --paper: #ECE7DC;
+    --paper-deep: #E2DBCB;
+    --ink: #22241E;
+    --ink-soft: #55584C;
+    --line: #C9C0A9;
+    --teal: #1F4B43;
+    --teal-soft: #35695F;
+    --amber: #C1832E;
+    --amber-soft: #E0A85A;
+    --red: #A8402F;
+    --card: #F5F1E7;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--paper);
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(34,36,30,0.035) 28px);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+
+  .wrap{ max-width: 720px; margin: 0 auto; padding: 20px 16px 80px; }
+
+  header{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    padding: 6px 4px 18px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 22px;
+  }
+  .brand h1{
+    font-family: 'Source Serif 4', serif;
+    font-weight: 700; font-style: italic;
+    font-size: 32px; margin: 0; letter-spacing: -0.5px;
+    color: var(--ink);
+  }
+  .brand p{
+    margin: 2px 0 0; font-size: 12.5px; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: 1.4px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .clock{
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft);
+    text-align: right;
+  }
+
+  /* --- Kayıt paneli --- */
+  .deck{
+    background: var(--card);
+    border: 1.5px solid var(--ink);
+    border-radius: 3px;
+    padding: 22px;
+    position: relative;
+    box-shadow: 4px 4px 0 rgba(34,36,30,0.08);
+    margin-bottom: 24px;
+  }
+
+  .reel-row{
+    display:flex; align-items:center; gap: 16px; margin-bottom: 16px;
+  }
+
+  .mic-btn{
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 2px solid var(--ink);
+    background: var(--paper);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; flex-shrink:0;
+    transition: transform .15s ease, background .2s ease;
+    position: relative;
+  }
+  .mic-btn:active{ transform: scale(0.94); }
+  .mic-btn.recording{ background: var(--red); border-color: var(--red); }
+  .mic-btn svg{ width: 26px; height: 26px; }
+  .mic-btn .ico-idle path{ fill: var(--ink); }
+  .mic-btn.recording .ico-idle path{ fill: #fff; }
+
+  .mic-btn.recording::after{
+    content:''; position:absolute; inset:-6px; border-radius:50%;
+    border: 2px solid var(--red); opacity: 0.55;
+    animation: pulse-ring 1.6s ease-out infinite;
+  }
+  @keyframes pulse-ring{
+    0%{ transform: scale(0.9); opacity: 0.6; }
+    100%{ transform: scale(1.35); opacity: 0; }
+  }
+
+  .status-block{ flex:1; min-width:0; }
+  .status-label{
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.8px; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .status-label.on{ color: var(--red); }
+  .tape{
+    display:flex; align-items:center; gap: 3px; height: 20px; margin-top: 6px;
+    overflow: hidden;
+  }
+  .tape span{
+    width: 3px; background: var(--line); border-radius: 2px;
+    height: 6px; transition: background .2s;
+  }
+  .tape.on span{ background: var(--teal); animation: bar 1.1s ease-in-out infinite; }
+  .tape span:nth-child(1){ animation-delay: 0s; }
+  .tape span:nth-child(2){ animation-delay: .1s; }
+  .tape span:nth-child(3){ animation-delay: .2s; }
+  .tape span:nth-child(4){ animation-delay: .3s; }
+  .tape span:nth-child(5){ animation-delay: .4s; }
+  .tape span:nth-child(6){ animation-delay: .5s; }
+  .tape span:nth-child(7){ animation-delay: .6s; }
+  .tape span:nth-child(8){ animation-delay: .7s; }
+  @keyframes bar{
+    0%,100%{ height: 6px; }
+    50%{ height: 20px; }
+  }
+
+  textarea#transcript{
+    width: 100%; min-height: 150px; resize: vertical;
+    border: 1px dashed var(--line);
+    background: var(--paper);
+    border-radius: 2px;
+    padding: 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14.5px; line-height: 1.6; color: var(--ink);
+  }
+  textarea#transcript:focus{ outline: none; border-color: var(--teal); }
+  textarea#transcript::placeholder{ color: #9a947f; }
+
+  .deck-actions{
+    display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;
+  }
+  button{
+    font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600;
+    border-radius: 2px; padding: 10px 16px; cursor: pointer;
+    border: 1.5px solid var(--ink); background: transparent; color: var(--ink);
+  }
+  button.primary{ background: var(--teal); border-color: var(--teal); color: #fff; }
+  button.ghost{ border-color: var(--line); color: var(--ink-soft); }
+  button:disabled{ opacity: 0.4; cursor: not-allowed; }
+
+  .warn{
+    font-size: 12.5px; color: var(--red); margin-top: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    display:none;
+  }
+  .warn.show{ display:block; }
+
+  /* --- Notlar listesi --- */
+  .list-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom: 12px; gap: 10px;
+  }
+  .list-head h2{
+    font-family: 'Source Serif 4', serif; font-size: 19px; margin:0; font-weight:600;
+  }
+  input#search{
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px;
+    border: 1px solid var(--line); background: var(--card);
+    border-radius: 2px; padding: 8px 10px; width: 160px;
+  }
+  input#search:focus{ outline:none; border-color: var(--teal); }
+
+  .note{
+    background: var(--card); border: 1px solid var(--line);
+    border-left: 4px solid var(--teal);
+    border-radius: 2px; padding: 14px 16px; margin-bottom: 10px;
+    cursor: pointer; transition: border-color .15s;
+  }
+  .note:hover{ border-left-color: var(--amber); }
+  .note-top{ display:flex; justify-content:space-between; gap:10px; align-items:baseline;}
+  .note-title{ font-weight: 600; font-size: 14.5px; }
+  .note-date{ font-family:'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); white-space:nowrap; }
+  .note-preview{ font-size: 13px; color: var(--ink-soft); margin-top: 5px; line-height:1.5;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .note-del{
+    border:none; background:none; color: var(--red); font-size: 12px;
+    font-family:'IBM Plex Mono', monospace; padding: 4px 0; margin-top:6px; cursor:pointer;
+  }
+  .empty{
+    text-align:center; padding: 30px 10px; color: var(--ink-soft);
+    font-family:'IBM Plex Mono', monospace; font-size: 13px; border: 1px dashed var(--line); border-radius:2px;
+  }
+
+  /* --- Düzenleme modalı --- */
+  .modal-bg{
+    position: fixed; inset:0; background: rgba(34,36,30,0.55);
+    display:none; align-items:flex-start; justify-content:center; padding: 24px 14px;
+    overflow-y: auto; z-index: 50;
+  }
+  .modal-bg.show{ display:flex; }
+  .modal{
+    background: var(--card); border: 1.5px solid var(--ink); border-radius: 3px;
+    max-width: 640px; width:100%; padding: 20px; margin-top: 10px;
+    box-shadow: 6px 6px 0 rgba(34,36,30,0.15);
+  }
+  .modal input#editTitle{
+    width:100%; font-family:'Source Serif 4', serif; font-weight:600; font-size:18px;
+    border:none; border-bottom: 1.5px solid var(--ink); background:transparent;
+    padding: 4px 2px 8px; margin-bottom: 12px;
+  }
+  .modal input#editTitle:focus{ outline:none; border-color: var(--teal); }
+  .modal textarea#editBody{
+    width:100%; min-height: 220px; font-family:'IBM Plex Mono', monospace; font-size:14px;
+    line-height:1.6; border:1px dashed var(--line); border-radius:2px; padding:12px; background: var(--paper);
+  }
+  .modal textarea#editBody:focus{ outline:none; border-color: var(--teal); }
+  .modal-actions{ display:flex; justify-content:space-between; margin-top:14px; gap:10px; }
+
+  footer{
+    text-align:center; margin-top: 30px; font-size: 11.5px; color: var(--ink-soft);
+    font-family:'IBM Plex Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Tutanak</h1>
+      <p>Sesli Not · Türkçe</p>
+    </div>
+    <div class="clock" id="clock"></div>
+  </header>
+
+  <div class="deck">
+    <div class="reel-row">
+      <button class="mic-btn" id="micBtn" title="Kayda başla / durdur">
+        <svg class="ico-idle" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+      </button>
+      <div class="status-block">
+        <div class="status-label" id="statusLabel">Hazır</div>
+        <div class="tape" id="tape">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
+    <textarea id="transcript" placeholder="Mikrofona basıp konuşmaya başlayın; söyledikleriniz burada belirecek. Metni istediğiniz zaman elle düzenleyebilirsiniz."></textarea>
+
+    <div class="warn" id="warnBox"></div>
+
+    <div class="deck-actions">
+      <button class="primary" id="saveBtn">Notu Kaydet</button>
+      <button class="ghost" id="clearBtn">Temizle</button>
+    </div>
+  </div>
+
+  <div class="list-head">
+    <h2>Kayıtlı Notlar</h2>
+    <input type="text" id="search" placeholder="ara...">
+  </div>
+  <div id="notesList"></div>
+
+  <footer>Ses tanıma bu cihazda ve tarayıcıda çalışır; notlar yalnızca bu tarayıcıda saklanır.</footer>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <input type="text" id="editTitle">
+    <textarea id="editBody"></textarea>
+    <div class="modal-actions">
+      <button class="ghost" id="deleteInModal">Sil</button>
+      <div style="display:flex; gap:8px;">
+        <button class="ghost" id="closeModal">Vazgeç</button>
+        <button class="primary" id="saveModal">Kaydet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const micBtn = document.getElementById('micBtn');
+  const statusLabel = document.getElementById('statusLabel');
+  const tape = document.getElementById('tape');
+  const transcriptEl = document.getElementById('transcript');
+  const warnBox = document.getElementById('warnBox');
+  const saveBtn = document.getElementById('saveBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const notesList = document.getElementById('notesList');
+  const searchEl = document.getElementById('search');
+  const clockEl = document.getElementById('clock');
+
+  const modalBg = document.getElementById('modalBg');
+  const editTitle = document.getElementById('editTitle');
+  const editBody = document.getElementById('editBody');
+  const deleteInModal = document.getElementById('deleteInModal');
+  const closeModal = document.getElementById('closeModal');
+  const saveModal = document.getElementById('saveModal');
+
+  let notes = [];
+  let editingId = null;
+  let recognizing = false;
+  let recognition = null;
+  let finalText = '';
+  let userStoppedManually = false;
+
+  const STORAGE_KEY = 'tutanak-notes';
+
+  function updateClock(){
+    const d = new Date();
+    clockEl.textContent = d.toLocaleDateString('tr-TR', { day:'2-digit', month:'long', year:'numeric' }) + ' · ' +
+                           d.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
+  }
+  updateClock();
+  setInterval(updateClock, 30000);
+
+  // ---------- Depolama ----------
+  async function loadNotes(){
+    try{
+      const res = await window.storage.get(STORAGE_KEY, false);
+      notes = res ? JSON.parse(res.value) : [];
+    }catch(e){
+      notes = [];
+    }
+    renderList();
+  }
+
+  async function persistNotes(){
+    try{
+      await window.storage.set(STORAGE_KEY, JSON.stringify(notes), false);
+    }catch(e){
+      console.error('Notlar kaydedilemedi', e);
+    }
+  }
+
+  // ---------- Ses tanıma ----------
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if(!SpeechRecognitionImpl){
+    warnBox.textContent = 'Bu tarayıcı canlı ses tanımayı desteklemiyor. Lütfen güncel Chrome tarayıcısı ile açın.';
+    warnBox.classList.add('show');
+    micBtn.disabled = true;
+  } else {
+    recognition = new SpeechRecognitionImpl();
+    recognition.lang = 'tr-TR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = function(event){
+      let interim = '';
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        const chunk = event.results[i][0].transcript;
+        if(event.results[i].isFinal){
+          finalText += chunk + ' ';
+        } else {
+          interim += chunk;
+        }
+      }
+      transcriptEl.value = (finalText + interim).trim();
+    };
+
+    recognition.onerror = function(event){
+      if(event.error === 'not-allowed' || event.error === 'service-not-allowed'){
+        warnBox.textContent = 'Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofon erişimine izin verin.';
+        warnBox.classList.add('show');
+        stopRecording(true);
+      } else if(event.error === 'no-speech'){
+        // sessizlik — otomatik olarak devam edecek
+      } else {
+        warnBox.textContent = 'Ses tanımada bir sorun oluştu (' + event.error + '). Tekrar deneyin.';
+        warnBox.classList.add('show');
+      }
+    };
+
+    recognition.onend = function(){
+      if(recognizing && !userStoppedManually){
+        // Chrome uzun sessizlikte otomatik durdurabiliyor; devam ettir
+        try{ recognition.start(); }catch(e){}
+      }
+    };
+  }
+
+  function startRecording(){
+    if(!recognition) return;
+    userStoppedManually = false;
+    warnBox.classList.remove('show');
+    try{
+      recognition.start();
+      recognizing = true;
+      micBtn.classList.add('recording');
+      statusLabel.textContent = 'Kaydediliyor…';
+      statusLabel.classList.add('on');
+      tape.classList.add('on');
+    }catch(e){
+      warnBox.textContent = 'Kayıt başlatılamadı. Sayfayı yenileyip tekrar deneyin.';
+      warnBox.classList.add('show');
+    }
+  }
+
+  function stopRecording(silent){
+    userStoppedManually = true;
+    recognizing = false;
+    if(recognition){ try{ recognition.stop(); }catch(e){} }
+    micBtn.classList.remove('recording');
+    statusLabel.textContent = 'Hazır';
+    statusLabel.classList.remove('on');
+    tape.classList.remove('on');
+  }
+
+  micBtn.addEventListener('click', function(){
+    if(recognizing){ stopRecording(); } else { startRecording(); }
+  });
+
+  transcriptEl.addEventListener('input', function(){
+    // elle düzenlemede finalText'i senkron tut
+    finalText = transcriptEl.value;
+  });
+
+  clearBtn.addEventListener('click', function(){
+    stopRecording();
+    transcriptEl.value = '';
+    finalText = '';
+  });
+
+  // ---------- Not kaydetme ----------
+  saveBtn.addEventListener('click', async function(){
+    const text = transcriptEl.value.trim();
+    if(!text) return;
+    const title = text.split(/\s+/).slice(0, 6).join(' ') + (text.split(/\s+/).length > 6 ? '…' : '');
+    const note = {
+      id: 'n' + Date.now(),
+      title: title,
+      body: text,
+      created: new Date().toISOString()
+    };
+    notes.unshift(note);
+    await persistNotes();
+    renderList();
+    stopRecording();
+    transcriptEl.value = '';
+    finalText = '';
+  });
+
+  // ---------- Liste ----------
+  function formatDate(iso){
+    const d = new Date(iso);
+    return d.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit', year:'2-digit' }) + ' ' +
+           d.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function renderList(){
+    const q = searchEl.value.trim().toLowerCase();
+    const filtered = notes.filter(n =>
+      !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q)
+    );
+
+    if(filtered.length === 0){
+      notesList.innerHTML = '<div class="empty">' + (notes.length === 0 ? 'Henüz kayıtlı not yok. Mikrofona basıp ilk notunuzu oluşturun.' : 'Aramanızla eşleşen not bulunamadı.') + '</div>';
+      return;
+    }
+
+    notesList.innerHTML = '';
+    filtered.forEach(n => {
+      const div = document.createElement('div');
+      div.className = 'note';
+      div.innerHTML =
+        '<div class="note-top"><div class="note-title"></div><div class="note-date">' + formatDate(n.created) + '</div></div>' +
+        '<div class="note-preview"></div>';
+      div.querySelector('.note-title').textContent = n.title;
+      div.querySelector('.note-preview').textContent = n.body;
+      div.addEventListener('click', () => openModal(n.id));
+      notesList.appendChild(div);
+    });
+  }
+
+  searchEl.addEventListener('input', renderList);
+
+  // ---------- Modal (düzenleme) ----------
+  function openModal(id){
+    const n = notes.find(x => x.id === id);
+    if(!n) return;
+    editingId = id;
+    editTitle.value = n.title;
+    editBody.value = n.body;
+    modalBg.classList.add('show');
+  }
+
+  closeModal.addEventListener('click', () => modalBg.classList.remove('show'));
+  modalBg.addEventListener('click', (e) => { if(e.target === modalBg) modalBg.classList.remove('show'); });
+
+  saveModal.addEventListener('click', async function(){
+    const n = notes.find(x => x.id === editingId);
+    if(!n) return;
+    n.title = editTitle.value.trim() || n.title;
+    n.body = editBody.value.trim();
+    await persistNotes();
+    renderList();
+    modalBg.classList.remove('show');
+  });
+
+  deleteInModal.addEventListener('click', async function(){
+    notes = notes.filter(x => x.id !== editingId);
+    await persistNotes();
+    renderList();
+    modalBg.classList.remove('show');
+  });
+
+  loadNotes();
+})();
+</script>
+
+</body>
+</html>
