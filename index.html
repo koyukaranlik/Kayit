@@ -348,12 +348,29 @@
     recognition.continuous = true;
     recognition.interimResults = true;
 
+    function appendFinalChunk(chunk){
+      const newWords = chunk.trim().split(/\s+/).filter(Boolean);
+      if(newWords.length === 0) return;
+      const existingWords = finalText.trim().length ? finalText.trim().split(/\s+/) : [];
+      const maxOverlap = Math.min(8, existingWords.length, newWords.length);
+      let overlap = 0;
+      for(let len = maxOverlap; len > 0; len--){
+        const tail = existingWords.slice(existingWords.length - len).join(' ').toLowerCase();
+        const head = newWords.slice(0, len).join(' ').toLowerCase();
+        if(tail === head){ overlap = len; break; }
+      }
+      const toAdd = newWords.slice(overlap).join(' ');
+      if(toAdd){
+        finalText = (finalText.trim() + ' ' + toAdd).trim() + ' ';
+      }
+    }
+
     recognition.onresult = function(event){
       let interim = '';
       for(let i = event.resultIndex; i < event.results.length; i++){
         const chunk = event.results[i][0].transcript;
         if(event.results[i].isFinal){
-          finalText += chunk + ' ';
+          appendFinalChunk(chunk);
         } else {
           interim += chunk;
         }
