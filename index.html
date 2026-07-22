@@ -387,6 +387,7 @@
   let finalText = '';
   let rawFinalWords = [];
   let noSpaceBeforeNext = false;
+  let heldWord = null; // 2 kelimelik bir komutun başlangıcı olabilecek, bir sonraki parçayla birleşmesi için bekletilen kelime
   let userStoppedManually = false;
 
   // Sesli noktalama komutları — Türkçe kelime(ler) söylenince ilgili işarete dönüşür
@@ -490,6 +491,18 @@
     }
   }
 
+  function isPossibleCommandStart(word){
+    const w = word.toLowerCase();
+    return PUNCT_COMMANDS.some(c => c.words.length === 2 && c.words[0] === w);
+  }
+
+  function flushHeldWord(){
+    if(heldWord !== null){
+      appendTokensToFinalText(tokenizeWithPunctCommands([heldWord]));
+      heldWord = null;
+    }
+  }
+
   // ---------- Ses tanıma ----------
   const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -516,7 +529,22 @@
       const trulyNew = newWords.slice(overlap);
       if(trulyNew.length === 0) return;
       rawFinalWords = rawFinalWords.concat(trulyNew);
-      appendTokensToFinalText(tokenizeWithPunctCommands(trulyNew));
+
+      let combined = trulyNew.slice();
+      if(heldWord !== null){
+        combined = [heldWord].concat(combined);
+        heldWord = null;
+      }
+
+      let toProcess = combined;
+      if(combined.length > 0 && isPossibleCommandStart(combined[combined.length - 1])){
+        heldWord = combined[combined.length - 1];
+        toProcess = combined.slice(0, -1);
+      }
+
+      if(toProcess.length){
+        appendTokensToFinalText(tokenizeWithPunctCommands(toProcess));
+      }
     }
 
     recognition.onresult = function(event){
@@ -574,6 +602,8 @@
     userStoppedManually = true;
     recognizing = false;
     if(recognition){ try{ recognition.stop(); }catch(e){} }
+    flushHeldWord();
+    transcriptEl.value = finalText.trim();
     micBtn.classList.remove('recording');
     statusLabel.textContent = 'Hazır';
     statusLabel.classList.remove('on');
@@ -589,6 +619,7 @@
     finalText = transcriptEl.value;
     rawFinalWords = finalText.trim().length ? finalText.trim().split(/\s+/) : [];
     noSpaceBeforeNext = false;
+    heldWord = null;
   });
 
   clearBtn.addEventListener('click', function(){
@@ -597,6 +628,7 @@
     finalText = '';
     rawFinalWords = [];
     noSpaceBeforeNext = false;
+    heldWord = null;
   });
 
   // ---------- Firebase / çoklu cihaz senkronizasyonu ----------
@@ -684,6 +716,8 @@
 
   // ---------- Not kaydetme ----------
   saveBtn.addEventListener('click', async function(){
+    flushHeldWord();
+    transcriptEl.value = finalText.trim();
     const text = transcriptEl.value.trim();
     if(!text) return;
     const title = text.split(/\s+/).slice(0, 6).join(' ') + (text.split(/\s+/).length > 6 ? '…' : '');
@@ -818,6 +852,8 @@
   const wordBtnModal = document.getElementById('wordBtnModal');
 
   wordBtn.addEventListener('click', function(){
+    flushHeldWord();
+    transcriptEl.value = finalText.trim();
     const text = transcriptEl.value.trim();
     if(!text) return;
     const title = text.split(/\s+/).slice(0, 6).join(' ');
