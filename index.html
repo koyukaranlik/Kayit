@@ -125,14 +125,15 @@
   }
 
   textarea#transcript{
-    width: 100%; min-height: 150px; resize: vertical;
+    width: 100%; height: 180px; resize: vertical;
     border: 1px dashed var(--line);
     background: var(--paper);
     border-radius: 2px;
     padding: 14px;
+    overflow-y: auto;
     font-family: 'Times New Roman', Times, serif;
     font-size: 12pt; line-height: 1.15; color: var(--ink);
-    text-indent: 3.5cm;
+    text-indent: 1.25cm;
   }
   textarea#transcript:focus{ outline: none; border-color: var(--teal); }
   textarea#transcript::placeholder{ color: #9a947f; }
@@ -212,7 +213,7 @@
   .modal input#editTitle:focus{ outline:none; border-color: var(--teal); }
   .modal textarea#editBody{
     width:100%; min-height: 220px; font-family: 'Times New Roman', Times, serif; font-size: 12pt;
-    line-height: 1.15; text-indent: 3.5cm;
+    line-height: 1.15; text-indent: 1.25cm;
     border:1px dashed var(--line); border-radius:2px; padding:12px; background: var(--paper);
   }
   .modal textarea#editBody:focus{ outline:none; border-color: var(--teal); }
@@ -388,6 +389,7 @@
   let rawFinalWords = [];
   let noSpaceBeforeNext = false;
   let heldWord = null; // 2 kelimelik bir komutun başlangıcı olabilecek, bir sonraki parçayla birleşmesi için bekletilen kelime
+  let capitalizeNext = true; // nokta/soru işareti/ünlem/yeni satır sonrası bir sonraki kelime büyük harfle başlasın
   let userStoppedManually = false;
 
   // Sesli noktalama komutları — Türkçe kelime(ler) söylenince ilgili işarete dönüşür
@@ -433,15 +435,22 @@
   }
 
   function appendTokensToFinalText(tokens){
+    const SENTENCE_ENDERS = ['.', '?', '!', '…'];
     tokens.forEach(tok => {
       if(tok.type === 'word'){
+        let word = tok.text;
+        if(capitalizeNext && word.length > 0){
+          word = word.charAt(0).toLocaleUpperCase('tr-TR') + word.slice(1);
+        }
         if(finalText.length > 0 && !noSpaceBeforeNext) finalText += ' ';
-        finalText += tok.text;
+        finalText += word;
         noSpaceBeforeNext = false;
+        capitalizeNext = false;
       } else if(tok.isBreak){
         finalText = finalText.replace(/[ \t]+$/, '');
         finalText += tok.symbol;
         noSpaceBeforeNext = true;
+        capitalizeNext = true;
       } else if(tok.spaceBoth){
         finalText = finalText.replace(/\s+$/, '');
         finalText += (finalText.length ? ' ' : '') + tok.symbol + ' ';
@@ -454,6 +463,7 @@
         finalText = finalText.replace(/\s+$/, '');
         finalText += tok.symbol;
         noSpaceBeforeNext = false;
+        if(SENTENCE_ENDERS.includes(tok.symbol)) capitalizeNext = true;
       }
     });
   }
@@ -558,6 +568,7 @@
         }
       }
       transcriptEl.value = (finalText + interim).trim();
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
     };
 
     recognition.onerror = function(event){
@@ -604,6 +615,7 @@
     if(recognition){ try{ recognition.stop(); }catch(e){} }
     flushHeldWord();
     transcriptEl.value = finalText.trim();
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
     micBtn.classList.remove('recording');
     statusLabel.textContent = 'Hazır';
     statusLabel.classList.remove('on');
@@ -620,6 +632,8 @@
     rawFinalWords = finalText.trim().length ? finalText.trim().split(/\s+/) : [];
     noSpaceBeforeNext = false;
     heldWord = null;
+    const trimmedEnd = finalText.replace(/\s+$/, '');
+    capitalizeNext = trimmedEnd.length === 0 || ['.', '?', '!', '…'].includes(trimmedEnd.charAt(trimmedEnd.length - 1));
   });
 
   clearBtn.addEventListener('click', function(){
@@ -629,6 +643,7 @@
     rawFinalWords = [];
     noSpaceBeforeNext = false;
     heldWord = null;
+    capitalizeNext = true;
   });
 
   // ---------- Firebase / çoklu cihaz senkronizasyonu ----------
@@ -757,7 +772,7 @@
       '<style>' +
       '@page{ size: 21cm 29.7cm; margin: 2.5cm; }' +
       'body{ font-family:"Times New Roman", Times, serif; font-size:12pt; line-height:1.15; }' +
-      'p{ text-indent:3.5cm; margin:0 0 8pt 0; }' +
+      'p{ text-indent:1.25cm; margin:0 0 8pt 0; }' +
       '</style></head><body>' + paragraphs + '</body></html>';
 
     const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
