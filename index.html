@@ -130,8 +130,9 @@
     background: var(--paper);
     border-radius: 2px;
     padding: 14px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 14.5px; line-height: 1.6; color: var(--ink);
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 12pt; line-height: 1.15; color: var(--ink);
+    text-indent: 3.5cm;
   }
   textarea#transcript:focus{ outline: none; border-color: var(--teal); }
   textarea#transcript::placeholder{ color: #9a947f; }
@@ -210,8 +211,9 @@
   }
   .modal input#editTitle:focus{ outline:none; border-color: var(--teal); }
   .modal textarea#editBody{
-    width:100%; min-height: 220px; font-family:'IBM Plex Mono', monospace; font-size:14px;
-    line-height:1.6; border:1px dashed var(--line); border-radius:2px; padding:12px; background: var(--paper);
+    width:100%; min-height: 220px; font-family: 'Times New Roman', Times, serif; font-size: 12pt;
+    line-height: 1.15; text-indent: 3.5cm;
+    border:1px dashed var(--line); border-radius:2px; padding:12px; background: var(--paper);
   }
   .modal textarea#editBody:focus{ outline:none; border-color: var(--teal); }
   .modal-actions{ display:flex; justify-content:space-between; margin-top:14px; gap:10px; }
@@ -220,11 +222,73 @@
     text-align:center; margin-top: 30px; font-size: 11.5px; color: var(--ink-soft);
     font-family:'IBM Plex Mono', monospace;
   }
+
+  /* --- Giriş ekranı --- */
+  .auth-bg{
+    min-height: 100vh; display:flex; align-items:center; justify-content:center;
+    padding: 24px 16px;
+  }
+  .auth-card{
+    background: var(--card); border: 1.5px solid var(--ink); border-radius: 3px;
+    padding: 28px 24px; max-width: 360px; width:100%;
+    box-shadow: 4px 4px 0 rgba(34,36,30,0.1);
+  }
+  .auth-card h1{
+    font-family: 'Source Serif 4', serif; font-weight:700; font-style:italic;
+    font-size: 28px; margin: 0 0 4px;
+  }
+  .auth-sub{
+    font-size: 12.5px; color: var(--ink-soft); margin: 0 0 18px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .auth-card input{
+    width:100%; padding: 10px 12px; margin-bottom: 10px;
+    border: 1px solid var(--line); border-radius: 2px; background: var(--paper);
+    font-family: 'Inter', sans-serif; font-size: 14px; color: var(--ink);
+  }
+  .auth-card input:focus{ outline:none; border-color: var(--teal); }
+  .auth-error{
+    font-size: 12px; color: var(--red); min-height: 16px; margin-bottom: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .auth-actions{ display:flex; gap: 8px; margin-top: 6px; }
+  .auth-actions button{ flex:1; }
+  .auth-divider{
+    text-align:center; font-size: 11px; color: var(--ink-soft);
+    font-family: 'IBM Plex Mono', monospace; margin: 12px 0 8px; position: relative;
+  }
+
+  .user-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft);
+    padding: 8px 4px; margin-bottom: 6px;
+  }
+  .user-bar button{ padding: 5px 10px; font-size: 12px; }
 </style>
 </head>
 <body>
 
-<div class="wrap">
+<div class="auth-bg" id="authScreen" style="display:none;">
+  <div class="auth-card">
+    <h1>Tutanak</h1>
+    <p class="auth-sub">Notlarınıza her cihazdan erişmek için giriş yapın</p>
+    <input type="email" id="authEmail" placeholder="e-posta">
+    <input type="password" id="authPassword" placeholder="şifre (en az 6 karakter)">
+    <div class="auth-error" id="authError"></div>
+    <div class="auth-actions">
+      <button class="primary" id="authSignInBtn">Giriş Yap</button>
+      <button class="ghost" id="authSignUpBtn">Hesap Oluştur</button>
+    </div>
+    <div class="auth-divider">veya</div>
+    <button class="ghost" id="authGoogleBtn" style="width:100%;">Google ile Giriş Yap</button>
+  </div>
+</div>
+
+<div class="wrap" id="mainApp">
+  <div class="user-bar" id="userBar" style="display:none;">
+    <span id="userEmailEl"></span>
+    <button class="ghost" id="logoutBtn">Çıkış Yap</button>
+  </div>
   <header>
     <div class="brand">
       <h1>Tutanak</h1>
@@ -252,6 +316,7 @@
 
     <div class="deck-actions">
       <button class="primary" id="saveBtn">Notu Kaydet</button>
+      <button class="ghost" id="wordBtn">Word'e Aktar (.doc)</button>
       <button class="ghost" id="clearBtn">Temizle</button>
     </div>
   </div>
@@ -262,7 +327,7 @@
   </div>
   <div id="notesList"></div>
 
-  <footer>Ses tanıma bu cihazda ve tarayıcıda çalışır; notlar yalnızca bu tarayıcıda saklanır.</footer>
+  <footer id="footerNote">Ses tanıma bu cihazda ve tarayıcıda çalışır.</footer>
 </div>
 
 <div class="modal-bg" id="modalBg">
@@ -272,6 +337,7 @@
     <div class="modal-actions">
       <button class="ghost" id="deleteInModal">Sil</button>
       <div style="display:flex; gap:8px;">
+        <button class="ghost" id="wordBtnModal">Word'e Aktar</button>
         <button class="ghost" id="closeModal">Vazgeç</button>
         <button class="primary" id="saveModal">Kaydet</button>
       </div>
@@ -299,12 +365,97 @@
   const closeModal = document.getElementById('closeModal');
   const saveModal = document.getElementById('saveModal');
 
+  const authScreen = document.getElementById('authScreen');
+  const mainApp = document.getElementById('mainApp');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authError = document.getElementById('authError');
+  const authSignInBtn = document.getElementById('authSignInBtn');
+  const authSignUpBtn = document.getElementById('authSignUpBtn');
+  const userBar = document.getElementById('userBar');
+  const userEmailEl = document.getElementById('userEmailEl');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const footerNote = document.getElementById('footerNote');
+
+  let firebaseConfigured = false;
+  let currentUid = null;
+
   let notes = [];
   let editingId = null;
   let recognizing = false;
   let recognition = null;
   let finalText = '';
+  let rawFinalWords = [];
+  let noSpaceBeforeNext = false;
   let userStoppedManually = false;
+
+  // Sesli noktalama komutları — Türkçe kelime(ler) söylenince ilgili işarete dönüşür
+  const PUNCT_COMMANDS = [
+    { words: ['soru', 'işareti'], symbol: '?' },
+    { words: ['ünlem', 'işareti'], symbol: '!' },
+    { words: ['iki', 'nokta'], symbol: ':' },
+    { words: ['noktalı', 'virgül'], symbol: ';' },
+    { words: ['üç', 'nokta'], symbol: '…' },
+    { words: ['yeni', 'paragraf'], symbol: '\n\n', isBreak: true },
+    { words: ['yeni', 'satır'], symbol: '\n', isBreak: true },
+    { words: ['parantez', 'aç'], symbol: '(', openBracket: true },
+    { words: ['parantez', 'kapa'], symbol: ')' },
+    { words: ['parantez', 'kapat'], symbol: ')' },
+    { words: ['tırnak', 'aç'], symbol: '"', openBracket: true },
+    { words: ['tırnak', 'kapa'], symbol: '"' },
+    { words: ['tırnak', 'kapat'], symbol: '"' },
+    { words: ['nokta'], symbol: '.' },
+    { words: ['virgül'], symbol: ',' },
+    { words: ['virgul'], symbol: ',' },
+    { words: ['ünlem'], symbol: '!' },
+    { words: ['tire'], symbol: '-', spaceBoth: true },
+  ];
+
+  function tokenizeWithPunctCommands(words){
+    const tokens = [];
+    let i = 0;
+    while(i < words.length){
+      let matched = null;
+      if(i + 1 < words.length){
+        const w2a = words[i].toLowerCase();
+        const w2b = words[i+1].toLowerCase();
+        matched = PUNCT_COMMANDS.find(c => c.words.length === 2 && c.words[0] === w2a && c.words[1] === w2b);
+        if(matched){ tokens.push({ type:'symbol', ...matched }); i += 2; continue; }
+      }
+      const w1 = words[i].toLowerCase();
+      matched = PUNCT_COMMANDS.find(c => c.words.length === 1 && c.words[0] === w1);
+      if(matched){ tokens.push({ type:'symbol', ...matched }); i += 1; continue; }
+      tokens.push({ type:'word', text: words[i] });
+      i += 1;
+    }
+    return tokens;
+  }
+
+  function appendTokensToFinalText(tokens){
+    tokens.forEach(tok => {
+      if(tok.type === 'word'){
+        if(finalText.length > 0 && !noSpaceBeforeNext) finalText += ' ';
+        finalText += tok.text;
+        noSpaceBeforeNext = false;
+      } else if(tok.isBreak){
+        finalText = finalText.replace(/[ \t]+$/, '');
+        finalText += tok.symbol;
+        noSpaceBeforeNext = true;
+      } else if(tok.spaceBoth){
+        finalText = finalText.replace(/\s+$/, '');
+        finalText += (finalText.length ? ' ' : '') + tok.symbol + ' ';
+        noSpaceBeforeNext = true;
+      } else if(tok.openBracket){
+        if(finalText.length > 0 && !noSpaceBeforeNext) finalText += ' ';
+        finalText += tok.symbol;
+        noSpaceBeforeNext = true;
+      } else {
+        finalText = finalText.replace(/\s+$/, '');
+        finalText += tok.symbol;
+        noSpaceBeforeNext = false;
+      }
+    });
+  }
 
   const STORAGE_KEY = 'tutanak-notes';
 
@@ -317,10 +468,14 @@
   setInterval(updateClock, 30000);
 
   // ---------- Depolama ----------
+  // Not: Bu uygulama artık bağımsız bir web sitesi olarak (GitHub Pages) çalıştığı
+  // için notlar bu tarayıcının kendi kalıcı depolamasında (localStorage) tutulur.
+  // Bu, yalnızca kullandığınız cihaz + tarayıcıya özeldir; tarayıcı verilerini
+  // temizlerseniz veya başka bir cihaz/tarayıcıdan girerseniz notlar görünmez.
   async function loadNotes(){
     try{
-      const res = await window.storage.get(STORAGE_KEY, false);
-      notes = res ? JSON.parse(res.value) : [];
+      const raw = localStorage.getItem(STORAGE_KEY);
+      notes = raw ? JSON.parse(raw) : [];
     }catch(e){
       notes = [];
     }
@@ -329,7 +484,7 @@
 
   async function persistNotes(){
     try{
-      await window.storage.set(STORAGE_KEY, JSON.stringify(notes), false);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
     }catch(e){
       console.error('Notlar kaydedilemedi', e);
     }
@@ -351,18 +506,17 @@
     function appendFinalChunk(chunk){
       const newWords = chunk.trim().split(/\s+/).filter(Boolean);
       if(newWords.length === 0) return;
-      const existingWords = finalText.trim().length ? finalText.trim().split(/\s+/) : [];
-      const maxOverlap = Math.min(8, existingWords.length, newWords.length);
+      const maxOverlap = Math.min(8, rawFinalWords.length, newWords.length);
       let overlap = 0;
       for(let len = maxOverlap; len > 0; len--){
-        const tail = existingWords.slice(existingWords.length - len).join(' ').toLowerCase();
+        const tail = rawFinalWords.slice(rawFinalWords.length - len).join(' ').toLowerCase();
         const head = newWords.slice(0, len).join(' ').toLowerCase();
         if(tail === head){ overlap = len; break; }
       }
-      const toAdd = newWords.slice(overlap).join(' ');
-      if(toAdd){
-        finalText = (finalText.trim() + ' ' + toAdd).trim() + ' ';
-      }
+      const trulyNew = newWords.slice(overlap);
+      if(trulyNew.length === 0) return;
+      rawFinalWords = rawFinalWords.concat(trulyNew);
+      appendTokensToFinalText(tokenizeWithPunctCommands(trulyNew));
     }
 
     recognition.onresult = function(event){
@@ -431,14 +585,101 @@
   });
 
   transcriptEl.addEventListener('input', function(){
-    // elle düzenlemede finalText'i senkron tut
+    // elle düzenlemede finalText'i ve dinleme durumunu senkron tut
     finalText = transcriptEl.value;
+    rawFinalWords = finalText.trim().length ? finalText.trim().split(/\s+/) : [];
+    noSpaceBeforeNext = false;
   });
 
   clearBtn.addEventListener('click', function(){
     stopRecording();
     transcriptEl.value = '';
     finalText = '';
+    rawFinalWords = [];
+    noSpaceBeforeNext = false;
+  });
+
+  // ---------- Firebase / çoklu cihaz senkronizasyonu ----------
+  let firebaseStatusReceived = false;
+
+  window.addEventListener('tutanak-firebase-status', function(e){
+    firebaseStatusReceived = true;
+    firebaseConfigured = e.detail.configured;
+    if(firebaseConfigured){
+      mainApp.style.display = 'none';
+      authScreen.style.display = 'flex';
+      footerNote.textContent = 'Notlarınız hesabınıza bağlı olarak tüm cihazlarda senkronize edilir.';
+    } else {
+      footerNote.textContent = 'Ses tanıma bu cihazda ve tarayıcıda çalışır; notlar yalnızca bu tarayıcıda saklanır.';
+      loadNotes();
+    }
+  });
+
+  // Firebase modülü ağ engeli veya bağlantı sorunu yüzünden hiç yüklenmezse,
+  // uygulamanın eski (yerel depolama) moduyla çalışmaya devam etmesini sağla.
+  setTimeout(function(){
+    if(!firebaseStatusReceived) loadNotes();
+  }, 1500);
+
+  window.addEventListener('tutanak-auth', function(e){
+    if(e.detail.loggedIn){
+      currentUid = e.detail.uid;
+      authScreen.style.display = 'none';
+      mainApp.style.display = 'block';
+      userBar.style.display = 'flex';
+      userEmailEl.textContent = e.detail.email;
+    } else {
+      currentUid = null;
+      notes = [];
+      renderList();
+      mainApp.style.display = 'none';
+      authScreen.style.display = 'flex';
+      authError.textContent = '';
+    }
+  });
+
+  window.addEventListener('tutanak-notes', function(e){
+    notes = e.detail;
+    renderList();
+  });
+
+  const authGoogleBtn = document.getElementById('authGoogleBtn');
+
+  function showAuthError(err){
+    const map = {
+      'auth/invalid-email': 'Geçersiz e-posta adresi.',
+      'auth/missing-password': 'Şifre girin.',
+      'auth/weak-password': 'Şifre en az 6 karakter olmalı.',
+      'auth/email-already-in-use': 'Bu e-posta zaten kayıtlı, Giriş Yap\'ı deneyin.',
+      'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+      'auth/wrong-password': 'E-posta veya şifre hatalı.',
+      'auth/user-not-found': 'Bu e-posta ile kayıtlı hesap bulunamadı, Hesap Oluştur\'u deneyin.',
+      'auth/popup-blocked': 'Tarayıcı açılır pencereyi engelledi. Tarayıcı ayarlarından açılır pencerelere izin verin.',
+      'auth/popup-closed-by-user': 'Google giriş penceresi kapatıldı, tekrar deneyin.',
+      'auth/unauthorized-domain': 'Bu site adresi Firebase\'de yetkili alan adları listesine eklenmemiş (Authentication → Settings → Authorized domains).'
+    };
+    authError.textContent = map[err.code] || ('Bir hata oluştu: ' + err.message);
+  }
+
+  authSignInBtn.addEventListener('click', function(){
+    authError.textContent = '';
+    window.TutanakCloud.signIn(authEmail.value.trim(), authPassword.value)
+      .catch(showAuthError);
+  });
+
+  authSignUpBtn.addEventListener('click', function(){
+    authError.textContent = '';
+    window.TutanakCloud.signUp(authEmail.value.trim(), authPassword.value)
+      .catch(showAuthError);
+  });
+
+  authGoogleBtn.addEventListener('click', function(){
+    authError.textContent = '';
+    window.TutanakCloud.signInGoogle().catch(showAuthError);
+  });
+
+  logoutBtn.addEventListener('click', function(){
+    window.TutanakCloud.signOutUser();
   });
 
   // ---------- Not kaydetme ----------
@@ -452,13 +693,53 @@
       body: text,
       created: new Date().toISOString()
     };
-    notes.unshift(note);
-    await persistNotes();
-    renderList();
+    if(firebaseConfigured && currentUid){
+      await window.TutanakCloud.saveNote(currentUid, note);
+      // liste, Firestore'un canlı senkronizasyonuyla (onSnapshot) otomatik güncellenir
+    } else {
+      notes.unshift(note);
+      await persistNotes();
+      renderList();
+    }
     stopRecording();
     transcriptEl.value = '';
     finalText = '';
+    rawFinalWords = [];
+    noSpaceBeforeNext = false;
   });
+
+  // ---------- Word'e aktarma ----------
+  function exportToWord(title, body){
+    const safeTitle = (title || 'not').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'not';
+    const paragraphs = body.split(/\n{2,}/).map(par =>
+      '<p>' + par.split('\n').map(line => escapeHtml(line)).join('<br>') + '</p>'
+    ).join('\n');
+
+    const html =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+      'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
+      'xmlns="http://www.w3.org/TR/REC-html40">' +
+      '<head><meta charset="utf-8">' +
+      '<style>' +
+      '@page{ size: 21cm 29.7cm; margin: 2.5cm; }' +
+      'body{ font-family:"Times New Roman", Times, serif; font-size:12pt; line-height:1.15; }' +
+      'p{ text-indent:3.5cm; margin:0 0 8pt 0; }' +
+      '</style></head><body>' + paragraphs + '</body></html>';
+
+    const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeTitle + '.doc';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function escapeHtml(str){
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
 
   // ---------- Liste ----------
   function formatDate(iso){
@@ -510,22 +791,107 @@
   saveModal.addEventListener('click', async function(){
     const n = notes.find(x => x.id === editingId);
     if(!n) return;
-    n.title = editTitle.value.trim() || n.title;
-    n.body = editBody.value.trim();
-    await persistNotes();
-    renderList();
+    const updated = { ...n, title: editTitle.value.trim() || n.title, body: editBody.value.trim() };
+    if(firebaseConfigured && currentUid){
+      await window.TutanakCloud.saveNote(currentUid, updated);
+    } else {
+      n.title = updated.title;
+      n.body = updated.body;
+      await persistNotes();
+      renderList();
+    }
     modalBg.classList.remove('show');
   });
 
   deleteInModal.addEventListener('click', async function(){
-    notes = notes.filter(x => x.id !== editingId);
-    await persistNotes();
-    renderList();
+    if(firebaseConfigured && currentUid){
+      await window.TutanakCloud.deleteNote(currentUid, editingId);
+    } else {
+      notes = notes.filter(x => x.id !== editingId);
+      await persistNotes();
+      renderList();
+    }
     modalBg.classList.remove('show');
   });
 
-  loadNotes();
+  const wordBtn = document.getElementById('wordBtn');
+  const wordBtnModal = document.getElementById('wordBtnModal');
+
+  wordBtn.addEventListener('click', function(){
+    const text = transcriptEl.value.trim();
+    if(!text) return;
+    const title = text.split(/\s+/).slice(0, 6).join(' ');
+    exportToWord(title, text);
+  });
+
+  wordBtnModal.addEventListener('click', function(){
+    const n = notes.find(x => x.id === editingId);
+    if(!n) return;
+    exportToWord(editTitle.value.trim() || n.title, editBody.value);
+  });
+
 })();
+</script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+    signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ================================================================
+  // Firebase konsolundan (console.firebase.google.com) aldığınız
+  // proje ayarlarını aşağıya yapıştırın. Doldurmadığınız sürece
+  // uygulama otomatik olarak eski (yalnızca bu tarayıcıda saklama)
+  // moduyla çalışmaya devam eder.
+  // ================================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBqegLMxdyEn2aH6IzCmHK2eqQlrCaJi4A",
+    authDomain: "evraklar.firebaseapp.com",
+    projectId: "evraklar",
+    storageBucket: "evraklar.firebasestorage.app",
+    messagingSenderId: "930542368763",
+    appId: "1:930542368763:web:c44410d800a51dfbd67d5e"
+  };
+
+  const isConfigured = !String(firebaseConfig.apiKey).includes('BURAYA');
+
+  window.dispatchEvent(new CustomEvent('tutanak-firebase-status', { detail: { configured: isConfigured } }));
+
+  if(isConfigured){
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    let unsubscribeNotes = null;
+
+    window.TutanakCloud = {
+      signUp(email, password){ return createUserWithEmailAndPassword(auth, email, password); },
+      signIn(email, password){ return signInWithEmailAndPassword(auth, email, password); },
+      signInGoogle(){ return signInWithPopup(auth, new GoogleAuthProvider()); },
+      signOutUser(){ return signOut(auth); },
+      saveNote(uid, note){ return setDoc(doc(db, 'users', uid, 'notes', note.id), note); },
+      deleteNote(uid, noteId){ return deleteDoc(doc(db, 'users', uid, 'notes', noteId)); }
+    };
+
+    onAuthStateChanged(auth, function(user){
+      if(unsubscribeNotes){ unsubscribeNotes(); unsubscribeNotes = null; }
+      if(user){
+        window.dispatchEvent(new CustomEvent('tutanak-auth', { detail: { loggedIn:true, email:user.email, uid:user.uid } }));
+        const notesQuery = query(collection(db, 'users', user.uid, 'notes'), orderBy('created', 'desc'));
+        unsubscribeNotes = onSnapshot(notesQuery, function(snapshot){
+          const list = [];
+          snapshot.forEach(d => list.push(d.data()));
+          window.dispatchEvent(new CustomEvent('tutanak-notes', { detail: list }));
+        });
+      } else {
+        window.dispatchEvent(new CustomEvent('tutanak-auth', { detail: { loggedIn:false } }));
+      }
+    });
+  }
 </script>
 
 </body>
