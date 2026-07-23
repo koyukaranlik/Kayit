@@ -420,12 +420,12 @@
     while(i < words.length){
       let matched = null;
       if(i + 1 < words.length){
-        const w2a = words[i].toLowerCase();
-        const w2b = words[i+1].toLowerCase();
+        const w2a = words[i].toLocaleLowerCase('tr-TR');
+        const w2b = words[i+1].toLocaleLowerCase('tr-TR');
         matched = PUNCT_COMMANDS.find(c => c.words.length === 2 && c.words[0] === w2a && c.words[1] === w2b);
         if(matched){ tokens.push({ type:'symbol', ...matched }); i += 2; continue; }
       }
-      const w1 = words[i].toLowerCase();
+      const w1 = words[i].toLocaleLowerCase('tr-TR');
       matched = PUNCT_COMMANDS.find(c => c.words.length === 1 && c.words[0] === w1);
       if(matched){ tokens.push({ type:'symbol', ...matched }); i += 1; continue; }
       tokens.push({ type:'word', text: words[i] });
@@ -502,7 +502,7 @@
   }
 
   function isPossibleCommandStart(word){
-    const w = word.toLowerCase();
+    const w = word.toLocaleLowerCase('tr-TR');
     return PUNCT_COMMANDS.some(c => c.words.length === 2 && c.words[0] === w);
   }
 
@@ -532,8 +532,8 @@
       const maxOverlap = Math.min(8, rawFinalWords.length, newWords.length);
       let overlap = 0;
       for(let len = maxOverlap; len > 0; len--){
-        const tail = rawFinalWords.slice(rawFinalWords.length - len).join(' ').toLowerCase();
-        const head = newWords.slice(0, len).join(' ').toLowerCase();
+        const tail = rawFinalWords.slice(rawFinalWords.length - len).join(' ').toLocaleLowerCase('tr-TR');
+        const head = newWords.slice(0, len).join(' ').toLocaleLowerCase('tr-TR');
         if(tail === head){ overlap = len; break; }
       }
       const trulyNew = newWords.slice(overlap);
@@ -798,9 +798,9 @@
   }
 
   function renderList(){
-    const q = searchEl.value.trim().toLowerCase();
+    const q = searchEl.value.trim().toLocaleLowerCase('tr-TR');
     const filtered = notes.filter(n =>
-      !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q)
+      !q || n.title.toLocaleLowerCase('tr-TR').includes(q) || n.body.toLocaleLowerCase('tr-TR').includes(q)
     );
 
     if(filtered.length === 0){
