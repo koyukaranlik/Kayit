@@ -265,6 +265,17 @@
     padding: 8px 4px; margin-bottom: 6px;
   }
   .user-bar button{ padding: 5px 10px; font-size: 12px; }
+
+  .speaker-row{
+    display:flex; align-items:center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  button.small{ padding: 7px 11px; font-size: 12px; }
+  button.ghost.active{ background: var(--teal); border-color: var(--teal); color: #fff; }
+  .speaker-now{
+    font-family:'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft);
+    margin-left: auto;
+  }
+  .audio-row{ margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -311,7 +322,17 @@
       </div>
     </div>
 
+    <div class="speaker-row">
+      <button class="ghost small" id="speakerBtn">👤 Konuşmacı Değiştir</button>
+      <button class="ghost small" id="muteBtn">⏸ Yazmayı Duraklat</button>
+      <span class="speaker-now" id="speakerNow">Konuşmacı 1</span>
+    </div>
+
     <textarea id="transcript" placeholder="Mikrofona basıp konuşmaya başlayın; söyledikleriniz burada belirecek. Metni istediğiniz zaman elle düzenleyebilirsiniz."></textarea>
+
+    <div class="audio-row" id="audioRow" style="display:none;">
+      <audio id="audioPlayer" controls style="width:100%;"></audio>
+    </div>
 
     <div class="warn" id="warnBox"></div>
 
@@ -335,6 +356,9 @@
   <div class="modal">
     <input type="text" id="editTitle">
     <textarea id="editBody"></textarea>
+    <div class="audio-row" id="modalAudioRow" style="display:none;">
+      <audio id="modalAudioPlayer" controls style="width:100%;"></audio>
+    </div>
     <div class="modal-actions">
       <button class="ghost" id="deleteInModal">Sil</button>
       <div style="display:flex; gap:8px;">
@@ -377,6 +401,13 @@
   const userEmailEl = document.getElementById('userEmailEl');
   const logoutBtn = document.getElementById('logoutBtn');
   const footerNote = document.getElementById('footerNote');
+  const speakerBtn = document.getElementById('speakerBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const speakerNow = document.getElementById('speakerNow');
+  const audioRow = document.getElementById('audioRow');
+  const audioPlayer = document.getElementById('audioPlayer');
+  const modalAudioRow = document.getElementById('modalAudioRow');
+  const modalAudioPlayer = document.getElementById('modalAudioPlayer');
 
   let firebaseConfigured = false;
   let currentUid = null;
@@ -391,6 +422,15 @@
   let heldWord = null; // 2 kelimelik bir komutun başlangıcı olabilecek, bir sonraki parçayla birleşmesi için bekletilen kelime
   let capitalizeNext = true; // nokta/soru işareti/ünlem/yeni satır sonrası bir sonraki kelime büyük harfle başlasın
   let userStoppedManually = false;
+  let transcriptionMuted = false; // "Yazmayı Duraklat" aktifken true; ses kaydı devam eder, metne dökme durur
+  let currentSpeaker = 1;
+
+  // --- Ses kaydı (MediaRecorder) ---
+  let mediaStream = null;
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let pendingAudioBlob = null; // henüz kaydedilmemiş notun ses kaydı
+  let pendingAudioDataUrl = null; // localStorage için base64 hali
 
   // Sesli noktalama komutları — Türkçe kelime(ler) söylenince ilgili işarete dönüşür
   const PUNCT_COMMANDS = [
@@ -585,17 +625,36 @@
     };
 
     recognition.onend = function(){
-      if(recognizing && !userStoppedManually){
+      if(recognizing && !userStoppedManually && !transcriptionMuted){
         // Chrome uzun sessizlikte otomatik durdurabiliyor; devam ettir
         try{ recognition.start(); }catch(e){}
       }
     };
   }
 
-  function startRecording(){
+  async function startRecording(){
     if(!recognition) return;
     userStoppedManually = false;
+    transcriptionMuted = false;
+    muteBtn.classList.remove('active');
+    muteBtn.textContent = '⏸ Yazmayı Duraklat';
     warnBox.classList.remove('show');
+
+    // Yalnızca yeni bir kayıt başlıyorsa (henüz mikrofon akışı yoksa) ses kaydını başlat
+    if(!mediaStream){
+      try{
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+        mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
+        mediaRecorder.ondataavailable = function(e){ if(e.data && e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.start();
+      }catch(e){
+        warnBox.textContent = 'Ses kaydı için mikrofon erişimi alınamadı; yalnızca metne dökme çalışacak.';
+        warnBox.classList.add('show');
+      }
+    }
+
     try{
       recognition.start();
       recognizing = true;
@@ -612,6 +671,9 @@
   function stopRecording(silent){
     userStoppedManually = true;
     recognizing = false;
+    transcriptionMuted = false;
+    muteBtn.classList.remove('active');
+    muteBtn.textContent = '⏸ Yazmayı Duraklat';
     if(recognition){ try{ recognition.stop(); }catch(e){} }
     flushHeldWord();
     transcriptEl.value = finalText.trim();
@@ -620,10 +682,53 @@
     statusLabel.textContent = 'Hazır';
     statusLabel.classList.remove('on');
     tape.classList.remove('on');
+
+    if(mediaRecorder && mediaRecorder.state !== 'inactive'){
+      mediaRecorder.onstop = function(){
+        pendingAudioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        const url = URL.createObjectURL(pendingAudioBlob);
+        audioPlayer.src = url;
+        audioRow.style.display = 'block';
+      };
+      mediaRecorder.stop();
+    }
+    if(mediaStream){
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
   }
 
   micBtn.addEventListener('click', function(){
     if(recognizing){ stopRecording(); } else { startRecording(); }
+  });
+
+  speakerBtn.addEventListener('click', function(){
+    currentSpeaker = currentSpeaker === 1 ? 2 : 1;
+    speakerNow.textContent = 'Konuşmacı ' + currentSpeaker;
+    flushHeldWord();
+    finalText = finalText.replace(/\s+$/, '');
+    finalText += (finalText.length ? '\n\n' : '') + '[Konuşmacı ' + currentSpeaker + ']: ';
+    noSpaceBeforeNext = true;
+    capitalizeNext = true;
+    transcriptEl.value = finalText;
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  });
+
+  muteBtn.addEventListener('click', function(){
+    if(!recognizing && !transcriptionMuted) return; // kayıt başlamadıysa etkisiz
+    transcriptionMuted = !transcriptionMuted;
+    if(transcriptionMuted){
+      userStoppedManually = false; // stopRecording ile karışmasın diye ayrı bayrak
+      if(recognition){ try{ recognition.stop(); }catch(e){} }
+      muteBtn.classList.add('active');
+      muteBtn.textContent = '▶ Yazmaya Devam Et';
+      statusLabel.textContent = 'Ses kaydediliyor, yazmıyor…';
+    } else {
+      try{ recognition.start(); }catch(e){}
+      muteBtn.classList.remove('active');
+      muteBtn.textContent = '⏸ Yazmayı Duraklat';
+      statusLabel.textContent = 'Kaydediliyor…';
+    }
   });
 
   transcriptEl.addEventListener('input', function(){
@@ -644,6 +749,12 @@
     noSpaceBeforeNext = false;
     heldWord = null;
     capitalizeNext = true;
+    currentSpeaker = 1;
+    speakerNow.textContent = 'Konuşmacı 1';
+    pendingAudioBlob = null;
+    pendingAudioDataUrl = null;
+    audioPlayer.src = '';
+    audioRow.style.display = 'none';
   });
 
   // ---------- Firebase / çoklu cihaz senkronizasyonu ----------
@@ -742,6 +853,24 @@
       body: text,
       created: new Date().toISOString()
     };
+
+    if(pendingAudioBlob){
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Kaydediliyor…';
+      try{
+        if(firebaseConfigured && currentUid && window.TutanakCloud.uploadAudio){
+          note.audioURL = await window.TutanakCloud.uploadAudio(currentUid, note.id, pendingAudioBlob);
+        } else {
+          note.audioDataUrl = await blobToDataUrl(pendingAudioBlob);
+        }
+      }catch(e){
+        warnBox.textContent = 'Ses kaydı eklenemedi (not metni yine de kaydedildi): ' + e.message;
+        warnBox.classList.add('show');
+      }
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Notu Kaydet';
+    }
+
     if(firebaseConfigured && currentUid){
       await window.TutanakCloud.saveNote(currentUid, note);
       // liste, Firestore'un canlı senkronizasyonuyla (onSnapshot) otomatik güncellenir
@@ -755,7 +884,22 @@
     finalText = '';
     rawFinalWords = [];
     noSpaceBeforeNext = false;
+    currentSpeaker = 1;
+    speakerNow.textContent = 'Konuşmacı 1';
+    pendingAudioBlob = null;
+    pendingAudioDataUrl = null;
+    audioPlayer.src = '';
+    audioRow.style.display = 'none';
   });
+
+  function blobToDataUrl(blob){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
 
   // ---------- Word'e aktarma ----------
   function exportToWord(title, body){
@@ -831,6 +975,13 @@
     editingId = id;
     editTitle.value = n.title;
     editBody.value = n.body;
+    if(n.audioURL || n.audioDataUrl){
+      modalAudioPlayer.src = n.audioURL || n.audioDataUrl;
+      modalAudioRow.style.display = 'block';
+    } else {
+      modalAudioPlayer.src = '';
+      modalAudioRow.style.display = 'none';
+    }
     modalBg.classList.add('show');
   }
 
@@ -893,6 +1044,9 @@
   import {
     getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import {
+    getStorage, ref, uploadBytes, getDownloadURL
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
   // ================================================================
   // Firebase konsolundan (console.firebase.google.com) aldığınız
@@ -917,6 +1071,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    const storage = getStorage(app);
     let unsubscribeNotes = null;
 
     window.TutanakCloud = {
@@ -925,7 +1080,12 @@
       signInGoogle(){ return signInWithPopup(auth, new GoogleAuthProvider()); },
       signOutUser(){ return signOut(auth); },
       saveNote(uid, note){ return setDoc(doc(db, 'users', uid, 'notes', note.id), note); },
-      deleteNote(uid, noteId){ return deleteDoc(doc(db, 'users', uid, 'notes', noteId)); }
+      deleteNote(uid, noteId){ return deleteDoc(doc(db, 'users', uid, 'notes', noteId)); },
+      async uploadAudio(uid, noteId, blob){
+        const storageRef = ref(storage, 'users/' + uid + '/audio/' + noteId + '.webm');
+        await uploadBytes(storageRef, blob);
+        return await getDownloadURL(storageRef);
+      }
     };
 
     onAuthStateChanged(auth, function(user){
