@@ -353,7 +353,6 @@
       <input type="checkbox" id="audioToggle">
       🎙️ Ham sesi de kaydet (deneysel — bazı cihazlarda yazıya dökmeyle çakışabilir)
     </label>
-    <div id="debugLine" style="font-family:monospace; font-size:11px; color:#a8402f; margin:0 0 8px 2px;"></div>
 
     <textarea id="transcript" placeholder="Mikrofona basıp konuşmaya başlayın; söyledikleriniz burada belirecek. Metni istediğiniz zaman elle düzenleyebilirsiniz."></textarea>
 
@@ -459,7 +458,6 @@
   const audioRow = document.getElementById('audioRow');
   const audioPlayer = document.getElementById('audioPlayer');
   const audioToggle = document.getElementById('audioToggle');
-  const debugLine = document.getElementById('debugLine');
   const modalAudioRow = document.getElementById('modalAudioRow');
   const modalAudioPlayer = document.getElementById('modalAudioPlayer');
   const summarizeBtn = document.getElementById('summarizeBtn');
@@ -726,7 +724,6 @@
     muteBtn.classList.remove('active');
     muteBtn.textContent = '⏸ Yazmayı Duraklat';
     warnBox.classList.remove('show');
-    debugLine.textContent = 'BAŞLADI — kutucuk: ' + audioToggle.checked + ' | eski mediaRecorder: ' + (mediaRecorder ? mediaRecorder.state : 'yok');
 
     if(!audioToggle.checked){
       // Kutucuk kapalıyken önceki bir kalıntı varsa tamamen temizle
@@ -792,7 +789,6 @@
     tape.classList.remove('on');
 
     if(mediaRecorder && mediaRecorder.state !== 'inactive' && audioToggle.checked){
-      debugLine.textContent = 'DURDU — kutucuk: ' + audioToggle.checked + ' → SES İŞLENECEK';
       mediaRecorder.onstop = function(){
         pendingAudioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
         const url = URL.createObjectURL(pendingAudioBlob);
@@ -802,14 +798,11 @@
       };
       mediaRecorder.stop();
     } else if(mediaRecorder){
-      debugLine.textContent = 'DURDU — kutucuk: ' + audioToggle.checked + ' → SES ATILDI (mediaRecorder vardı ama kutucuk kapalıydı)';
       // Kutucuk işaretli değilse (veya işaretliyken başlayıp sonradan kapatıldıysa)
       // ses kaydını kesinlikle işleme, tamamen at
       try{ mediaRecorder.ondataavailable = null; mediaRecorder.onstop = null; if(mediaRecorder.state !== 'inactive') mediaRecorder.stop(); }catch(e){}
       mediaRecorder = null;
       audioChunks = [];
-    } else {
-      debugLine.textContent = 'DURDU — kutucuk: ' + audioToggle.checked + ' → mediaRecorder hiç yoktu (temiz)';
     }
     if(mediaStream){
       mediaStream.getTracks().forEach(t => t.stop());
@@ -1045,6 +1038,15 @@
     return parcalar.map(s => s.trim()).filter(s => s.split(/\s+/).length >= 3);
   }
 
+  // Hukuki/kurumsal metinlerde özete girmesi muhtemel kalıp ifadeler
+  const ONEMLI_KALIPLAR = [
+    'karar verildi', 'karar verilmiştir', 'sonuç olarak', 'netice olarak',
+    'talep ediyorum', 'talep edilmektedir', 'reddedildi', 'reddedilmiştir',
+    'kabul edildi', 'kabul edilmiştir', 'iptal edildi', 'iptal edilmiştir',
+    'onaylandı', 'hükmedildi', 'itiraz', 'gerekçe', 'başvuru', 'değerlendirilmiştir',
+    'uygun görülmüştür', 'uygun bulunmamıştır'
+  ];
+
   function basitOzetle(metin, cumleSayisi){
     const cumleler = cumlelereAyir(metin);
     if(cumleler.length === 0) return 'Özetlenecek yeterli metin bulunamadı.';
@@ -1059,20 +1061,55 @@
       });
     });
 
-    // her cümleye skor ver (kelime sıklığı toplamı / cümle uzunluğuna göre normalize)
+    // her cümleye skor ver
     const skorlar = cumleler.map((c, i) => {
       const kelimeler = c.toLocaleLowerCase('tr-TR').replace(/[.,!?…:;()"]/g, '').split(/\s+/)
         .filter(k => k.length >= 3 && !TR_STOPWORDS.has(k));
       const toplam = kelimeler.reduce((acc, k) => acc + (sikligi[k] || 0), 0);
-      const skor = kelimeler.length > 0 ? toplam / Math.sqrt(kelimeler.length) : 0;
+      let skor = kelimeler.length > 0 ? toplam / Math.sqrt(kelimeler.length) : 0;
+
+      // sayı/madde/tarih içeren cümlelere ekstra ağırlık
+      if(/\d/.test(c)) skor *= 1.3;
+
+      // ilk ve son cümlelere hafif bonus (giriş/sonuç genelde önemlidir)
+      if(i < 2 || i >= cumleler.length - 2) skor *= 1.15;
+
+      // önemli kalıp ifadeler içeren cümlelere ekstra ağırlık
+      const cLower = c.toLocaleLowerCase('tr-TR');
+      if(ONEMLI_KALIPLAR.some(kalip => cLower.includes(kalip))) skor *= 1.4;
+
       return { index: i, skor };
     });
 
-    // en yüksek skorlu N cümleyi seç, orijinal sıraya göre diz
-    const secilenler = skorlar.sort((a, b) => b.skor - a.skor).slice(0, cumleSayisi)
-      .sort((a, b) => a.index - b.index);
+    // yüksekten düşüğe sırala, birbirine çok benzeyen cümleleri eleyerek seç
+    const adaylar = skorlar.sort((a, b) => b.skor - a.skor);
+    const secilenIndexler = [];
 
-    return secilenler.map(s => cumleler[s.index]).join(' ');
+    function benzerlikOrani(c1, c2){
+      const k1 = new Set(c1.toLocaleLowerCase('tr-TR').replace(/[.,!?…:;()"]/g, '').split(/\s+/).filter(k => k.length >= 3));
+      const k2 = new Set(c2.toLocaleLowerCase('tr-TR').replace(/[.,!?…:;()"]/g, '').split(/\s+/).filter(k => k.length >= 3));
+      if(k1.size === 0 || k2.size === 0) return 0;
+      let ortak = 0;
+      k1.forEach(k => { if(k2.has(k)) ortak++; });
+      return ortak / Math.min(k1.size, k2.size);
+    }
+
+    for(const aday of adaylar){
+      if(secilenIndexler.length >= cumleSayisi) break;
+      const cokBenziyor = secilenIndexler.some(i => benzerlikOrani(cumleler[aday.index], cumleler[i]) > 0.6);
+      if(!cokBenziyor) secilenIndexler.push(aday.index);
+    }
+
+    // yeterli benzersiz cümle bulunamadıysa, en yüksek skorlulardan tamamla
+    if(secilenIndexler.length < cumleSayisi){
+      for(const aday of adaylar){
+        if(secilenIndexler.length >= cumleSayisi) break;
+        if(!secilenIndexler.includes(aday.index)) secilenIndexler.push(aday.index);
+      }
+    }
+
+    secilenIndexler.sort((a, b) => a - b);
+    return secilenIndexler.map(i => cumleler[i]).join(' ');
   }
 
   summarizeBtn.addEventListener('click', function(){
