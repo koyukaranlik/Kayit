@@ -276,6 +276,24 @@
     margin-left: auto;
   }
   .audio-row{ margin-top: 10px; }
+
+  .summary-box{
+    margin-top: 12px; border: 1px solid var(--line); border-left: 4px solid var(--amber);
+    background: var(--card); border-radius: 2px; padding: 12px 14px;
+  }
+  .summary-head{
+    display:flex; align-items:center; justify-content:space-between;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight:600;
+    color: var(--ink-soft); margin-bottom: 8px;
+  }
+  .summary-select{
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 2px; padding: 3px 6px;
+  }
+  .summary-text{
+    font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; color: var(--ink);
+    white-space: pre-line;
+  }
 </style>
 </head>
 <body>
@@ -336,8 +354,21 @@
 
     <div class="warn" id="warnBox"></div>
 
+    <div class="summary-box" id="summaryBox" style="display:none;">
+      <div class="summary-head">
+        <span>📝 Özet</span>
+        <select id="summaryLength" class="summary-select">
+          <option value="3">Kısa (3 cümle)</option>
+          <option value="5" selected>Orta (5 cümle)</option>
+          <option value="8">Uzun (8 cümle)</option>
+        </select>
+      </div>
+      <div class="summary-text" id="summaryText"></div>
+    </div>
+
     <div class="deck-actions">
       <button class="primary" id="saveBtn">Notu Kaydet</button>
+      <button class="ghost" id="summarizeBtn">📝 Özetle</button>
       <button class="ghost" id="wordBtn">Word'e Aktar (.doc)</button>
       <button class="ghost" id="clearBtn">Temizle</button>
     </div>
@@ -359,9 +390,21 @@
     <div class="audio-row" id="modalAudioRow" style="display:none;">
       <audio id="modalAudioPlayer" controls style="width:100%;"></audio>
     </div>
+    <div class="summary-box" id="modalSummaryBox" style="display:none;">
+      <div class="summary-head">
+        <span>📝 Özet</span>
+        <select id="modalSummaryLength" class="summary-select">
+          <option value="3">Kısa (3 cümle)</option>
+          <option value="5" selected>Orta (5 cümle)</option>
+          <option value="8">Uzun (8 cümle)</option>
+        </select>
+      </div>
+      <div class="summary-text" id="modalSummaryText"></div>
+    </div>
     <div class="modal-actions">
       <button class="ghost" id="deleteInModal">Sil</button>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="ghost" id="summarizeBtnModal">📝 Özetle</button>
         <button class="ghost" id="wordBtnModal">Word'e Aktar</button>
         <button class="ghost" id="closeModal">Vazgeç</button>
         <button class="primary" id="saveModal">Kaydet</button>
@@ -408,6 +451,14 @@
   const audioPlayer = document.getElementById('audioPlayer');
   const modalAudioRow = document.getElementById('modalAudioRow');
   const modalAudioPlayer = document.getElementById('modalAudioPlayer');
+  const summarizeBtn = document.getElementById('summarizeBtn');
+  const summaryBox = document.getElementById('summaryBox');
+  const summaryText = document.getElementById('summaryText');
+  const summaryLength = document.getElementById('summaryLength');
+  const summarizeBtnModal = document.getElementById('summarizeBtnModal');
+  const modalSummaryBox = document.getElementById('modalSummaryBox');
+  const modalSummaryText = document.getElementById('modalSummaryText');
+  const modalSummaryLength = document.getElementById('modalSummaryLength');
 
   let firebaseConfigured = false;
   let currentUid = null;
@@ -755,6 +806,8 @@
     pendingAudioDataUrl = null;
     audioPlayer.src = '';
     audioRow.style.display = 'none';
+    summaryBox.style.display = 'none';
+    summaryText.textContent = '';
   });
 
   // ---------- Firebase / çoklu cihaz senkronizasyonu ----------
@@ -853,6 +906,9 @@
       body: text,
       created: new Date().toISOString()
     };
+    if(summaryBox.style.display !== 'none' && summaryText.textContent.trim()){
+      note.summary = summaryText.textContent.trim();
+    }
 
     if(pendingAudioBlob){
       saveBtn.disabled = true;
@@ -890,6 +946,8 @@
     pendingAudioDataUrl = null;
     audioPlayer.src = '';
     audioRow.style.display = 'none';
+    summaryBox.style.display = 'none';
+    summaryText.textContent = '';
   });
 
   function blobToDataUrl(blob){
@@ -900,6 +958,78 @@
       reader.readAsDataURL(blob);
     });
   }
+
+  // ---------- Özetleme (ücretsiz, anahtarsız, tamamen çevrimdışı) ----------
+  const TR_STOPWORDS = new Set([
+    've','veya','ile','bir','bu','şu','o','da','de','ki','mi','mı','mu','mü',
+    'için','gibi','çok','daha','en','ama','fakat','ancak','çünkü','eğer','ise',
+    'olan','olarak','olduğu','oldu','olur','olacak','değil','var','yok','şey',
+    'bu','şu','onun','onu','ona','bunun','bunu','buna','biz','siz','ben','sen',
+    'kendi','her','tüm','bütün','bazı','diğer','sonra','önce','şimdi','artık',
+    'ne','neden','nasıl','niçin','hangi','kadar','göre','üzere','yani','ise',
+    'the','a','an','and','or','to','of','in','on'
+  ]);
+
+  function cumlelereAyir(metin){
+    // [Konuşmacı N]: etiketlerini ve fazla boşlukları temizleyip cümlelere böl
+    const temiz = metin.replace(/\[Konuşmacı \d+\]:/g, ' ').replace(/\s+/g, ' ').trim();
+    const parcalar = temiz.match(/[^.!?…]+[.!?…]*/g) || [];
+    return parcalar.map(s => s.trim()).filter(s => s.split(/\s+/).length >= 3);
+  }
+
+  function basitOzetle(metin, cumleSayisi){
+    const cumleler = cumlelereAyir(metin);
+    if(cumleler.length === 0) return 'Özetlenecek yeterli metin bulunamadı.';
+    if(cumleler.length <= cumleSayisi) return cumleler.join(' ');
+
+    // kelime sıklığı hesapla
+    const sikligi = {};
+    cumleler.forEach(c => {
+      c.toLocaleLowerCase('tr-TR').replace(/[.,!?…:;()"]/g, '').split(/\s+/).forEach(kelime => {
+        if(kelime.length < 3 || TR_STOPWORDS.has(kelime)) return;
+        sikligi[kelime] = (sikligi[kelime] || 0) + 1;
+      });
+    });
+
+    // her cümleye skor ver (kelime sıklığı toplamı / cümle uzunluğuna göre normalize)
+    const skorlar = cumleler.map((c, i) => {
+      const kelimeler = c.toLocaleLowerCase('tr-TR').replace(/[.,!?…:;()"]/g, '').split(/\s+/)
+        .filter(k => k.length >= 3 && !TR_STOPWORDS.has(k));
+      const toplam = kelimeler.reduce((acc, k) => acc + (sikligi[k] || 0), 0);
+      const skor = kelimeler.length > 0 ? toplam / Math.sqrt(kelimeler.length) : 0;
+      return { index: i, skor };
+    });
+
+    // en yüksek skorlu N cümleyi seç, orijinal sıraya göre diz
+    const secilenler = skorlar.sort((a, b) => b.skor - a.skor).slice(0, cumleSayisi)
+      .sort((a, b) => a.index - b.index);
+
+    return secilenler.map(s => cumleler[s.index]).join(' ');
+  }
+
+  summarizeBtn.addEventListener('click', function(){
+    const metin = transcriptEl.value.trim();
+    if(!metin){ return; }
+    const ozet = basitOzetle(metin, parseInt(summaryLength.value, 10));
+    summaryText.textContent = ozet;
+    summaryBox.style.display = 'block';
+  });
+
+  summaryLength.addEventListener('change', function(){
+    if(summaryBox.style.display !== 'none') summarizeBtn.click();
+  });
+
+  summarizeBtnModal.addEventListener('click', function(){
+    const metin = editBody.value.trim();
+    if(!metin){ return; }
+    const ozet = basitOzetle(metin, parseInt(modalSummaryLength.value, 10));
+    modalSummaryText.textContent = ozet;
+    modalSummaryBox.style.display = 'block';
+  });
+
+  modalSummaryLength.addEventListener('change', function(){
+    if(modalSummaryBox.style.display !== 'none') summarizeBtnModal.click();
+  });
 
   // ---------- Word'e aktarma ----------
   function exportToWord(title, body){
@@ -982,6 +1112,13 @@
       modalAudioPlayer.src = '';
       modalAudioRow.style.display = 'none';
     }
+    if(n.summary){
+      modalSummaryText.textContent = n.summary;
+      modalSummaryBox.style.display = 'block';
+    } else {
+      modalSummaryText.textContent = '';
+      modalSummaryBox.style.display = 'none';
+    }
     modalBg.classList.add('show');
   }
 
@@ -992,6 +1129,9 @@
     const n = notes.find(x => x.id === editingId);
     if(!n) return;
     const updated = { ...n, title: editTitle.value.trim() || n.title, body: editBody.value.trim() };
+    if(modalSummaryBox.style.display !== 'none' && modalSummaryText.textContent.trim()){
+      updated.summary = modalSummaryText.textContent.trim();
+    }
     if(firebaseConfigured && currentUid){
       await window.TutanakCloud.saveNote(currentUid, updated);
     } else {
